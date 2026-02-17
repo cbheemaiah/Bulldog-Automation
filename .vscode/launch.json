@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug (venv python)",
+      "type": "python",
+      "request": "launch",
+      "python": "/Users/chiragbheemaiah/Desktop/Bulldog/.venv/bin/python",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

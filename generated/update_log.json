@@ -1,0 +1,30 @@
+[
+  {
+    "id": 135,
+    "email": "ava.martin@example.com",
+    "firstname": "Ava",
+    "lastname": "Martin",
+    "updated_at": "2026-02-17 12:43:38"
+  },
+  {
+    "id": 136,
+    "email": "liam.johnson@example.com",
+    "firstname": "Liam",
+    "lastname": "Johnson",
+    "updated_at": "2026-02-17 12:43:38"
+  },
+  {
+    "id": 135,
+    "email": "ava.martin@example.com",
+    "firstname": "Ava",
+    "lastname": "Martin",
+    "updated_at": "2026-02-17 12:44:09"
+  },
+  {
+    "id": 136,
+    "email": "liam.johnson@example.com",
+    "firstname": "Liam",
+    "lastname": "Johnson",
+    "updated_at": "2026-02-17 12:44:10"
+  }
+]
