@@ -133,11 +133,12 @@ def main():
             "firstname": first,
             "lastname": last,
             "tags": cfg.default_create_tags,
+            "rotationgroup": idx % 4 + 1 # required for round robin distribution of emails
         }
 
         try:
             cid = contacts.create_contact(payload)
-            item = {"id": cid, "email": email, "firstname": first, "lastname": last}
+            item = {"id": cid, "email": email, "firstname": first, "lastname": last, "rotationgroup": payload["rotationgroup"]}
             
             new_history_items.append(item)
             new_pending_items.append(item)

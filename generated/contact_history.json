@@ -1,1 +1,37 @@
-[]
+[
+  {
+    "id": 4239,
+    "email": "fuldaoda1@gmail.com",
+    "firstname": "Oda",
+    "lastname": "Fulda",
+    "rotationgroup": 1
+  },
+  {
+    "id": 4240,
+    "email": "cv9036552@gmail.com",
+    "firstname": "Chris",
+    "lastname": "Vanclief",
+    "rotationgroup": 2
+  },
+  {
+    "id": 4241,
+    "email": "ulrikebatten855@gmail.com",
+    "firstname": "Ulrike",
+    "lastname": "Batten",
+    "rotationgroup": 3
+  },
+  {
+    "id": 4242,
+    "email": "kutishatchin@gmail.com",
+    "firstname": "Tishatchin",
+    "lastname": "Ku",
+    "rotationgroup": 4
+  },
+  {
+    "id": 4243,
+    "email": "akrenek240@gmail.com",
+    "firstname": "America",
+    "lastname": "Krenek",
+    "rotationgroup": 1
+  }
+]
