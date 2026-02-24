@@ -1,12 +1,11 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from app.exceptions import MauticAPIError
 from app.mautic_client import MauticClient
 
 class ContactClient:
-    def __init__(self, mautic: MauticClient, create_endpoint: str, update_template: str):
+    def __init__(self, mautic: MauticClient, create_endpoint: str):
         self.mautic = mautic
         self.create_endpoint = create_endpoint
-        self.update_template = update_template
 
     def create_contact(self, payload: Dict[str, Any]) -> int:
         if not payload.get("email"):
@@ -33,7 +32,3 @@ class ContactClient:
         endpoint = f"api/contacts/{contact_id}"
         data = self.mautic.request_json("GET", endpoint)
         return data.get("contact", {})
-
-    def update_contact_tags(self, contact_id: int, tags: List[str]) -> None:
-        endpoint = self.update_template.format(id=contact_id)
-        self.mautic.request_json("PATCH", endpoint, json_body={"tags": tags})

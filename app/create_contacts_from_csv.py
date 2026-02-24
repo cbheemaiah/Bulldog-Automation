@@ -2,6 +2,9 @@ import json
 import sys
 import os
 import pandas as pd
+from datetime import datetime
+import glob
+import logging
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -19,160 +22,301 @@ def split_name(full_name: str):
     parts = s.split()
     return parts[0], (" ".join(parts[1:]) if len(parts) > 1 else "")
 
-def get_tag_names(contact_data):
-    """
-    Helper to extract tag names from Mautic contact response.
-    Handles both list-of-dicts (standard) and dict-of-dicts (legacy) formats.
-    """
-    raw_tags = contact_data.get("tags") or []
-    tags = set()
-    if isinstance(raw_tags, list):
-        for t in raw_tags:
-            if isinstance(t, dict):
-                val = t.get("tag")
-                if val:
-                    tags.add(val)
-            elif isinstance(t, str):
-                tags.add(t)
-    elif isinstance(raw_tags, dict):
-        for t in raw_tags.values():
-            if isinstance(t, dict):
-                val = t.get("tag")
-                if val:
-                    tags.add(val)
-    return tags
-
 def main():
-    cfg = AppConfig.load("config.json")
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
+    logger = logging.getLogger(__name__)
 
-    mautic = MauticClient(cfg.base_url, token_file=cfg.token_file, timeout_seconds=cfg.timeout_seconds)
-    contacts = ContactClient(mautic, cfg.create_endpoint, cfg.update_endpoint_template)
+    logger.info("Starting Bulldog contact creation process...")
 
-    df = pd.read_csv(cfg.csv_path)
-    if cfg.limit and cfg.limit > 0:
+    try:
+        cfg = AppConfig.load("config.json")
+        logger.info("Configuration loaded successfully.")
+    except Exception as e:
+        logger.critical(f"Failed to load configuration: {e}")
+        return
+
+    segment_id = cfg.segment_id
+    test_tag_name = cfg.test_tag_name
+
+    if not segment_id:
+        logger.error("Aborting: 'segment_id' not found in config.")
+        return
+    if not test_tag_name:
+        logger.error("Aborting: 'test_tag_name' not found in config.")
+        return
+
+    # 1. Find the CSV to process (Latest import or fallback to config default)
+    search_pattern = os.path.join(cfg.input_dir, "bulldog_import_*.csv")
+    files = glob.glob(search_pattern)
+    
+    download_path = None
+    if files:
+        download_path = max(files, key=os.path.getctime)
+        logger.info(f"Found latest CSV file: {download_path}")
+
+    if not download_path or not os.path.exists(download_path) or os.path.getsize(download_path) == 0:
+        logger.error("Aborting: No valid CSV file found to process.")
+        return
+
+    logger.info(f"Processing CSV: {download_path}")
+
+    # Validate CSV format before contacting Mautic
+    try:
+        df = pd.read_csv(download_path)
+        logger.info(f"CSV loaded. Rows: {len(df)}")
+    except Exception as e:
+        logger.error(f"Aborting: Invalid CSV format in {download_path}. Error: {e}")
+        return
+
+    if df.empty:
+        logger.error("Aborting: CSV contains no data.")
+        return
+
+    if len(df.columns) < 1:
+        logger.error("Aborting: CSV must have at least 1 column (Email).")
+        return
+
+    if hasattr(cfg, 'limit') and cfg.limit and cfg.limit > 0:
+        logger.info(f"Applying limit: {cfg.limit}")
         df = df.head(cfg.limit)
 
-    # 1. Load Local History for Existence Check
-    history_map = {}
+    logger.info("Initializing Mautic client...")
+    mautic = MauticClient(cfg.base_url, token_file=cfg.token_file, timeout_seconds=cfg.timeout_seconds)
+    contacts = ContactClient(mautic, cfg.create_endpoint)
+
+    # 1. Load Local History
+    history_list = []
     if os.path.exists(cfg.history_file):
         try:
             with open(cfg.history_file, "r", encoding="utf-8") as f:
                 history_list = json.load(f)
-                for item in history_list:
-                    if item.get("email"):
-                        history_map[item["email"].strip().lower()] = item
+            logger.info(f"Loaded {len(history_list)} items from history.")
         except Exception as e:
-            print(f"Error loading history file: {e}")
+            logger.warning(f"Error loading history file: {e}")
 
-    # 2. Load Pending Updates (to append to)
-    pending_updates = []
-    if os.path.exists(cfg.pending_update_file):
+    new_history_items = []
+
+    # Helper to make requests using MauticClient
+    def mautic_request(method, endpoint, payload=None, params=None):
+        return mautic.request_json(method, endpoint, json_body=payload, params=params)
+
+    # 3. Create a new tag - Digital Bulldog - Day * and save ID
+    state_file = os.path.join(cfg.output_dir, "bulldog_state.json")
+
+    
+    current_day = 0
+    last_run_date = ""
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    if os.path.exists(state_file):
         try:
-            with open(cfg.pending_update_file, "r", encoding="utf-8") as f:
-                pending_updates = json.load(f)
+            with open(state_file, "r") as f:
+                state = json.load(f)
+                current_day = state.get("day", 0)
+                last_run_date = state.get("last_run_date", "")
         except Exception:
             pass
 
-    new_history_items = []
-    new_pending_items = []
+    if last_run_date != today_str:
+        current_day += 1
+        last_run_date = today_str
+        with open(state_file, "w") as f:
+            json.dump({"day": current_day, "last_run_date": last_run_date}, f)
 
-    for idx, row in df.iterrows():
-        email_raw = row.iloc[0] if len(row) > 0 else None
-        name_cell = row.iloc[1] if len(row) > 1 else None
+    logger.info(f"Current Day State: {current_day} (Last run: {last_run_date})")
 
-        if pd.isna(email_raw) or not str(email_raw).strip():
-            print(f"Row {idx}: missing email")
-            continue
+    new_tag_name = f"Digital-Bulldog-Day-{current_day}"
+    new_tag_id = None
 
-        email = str(email_raw).strip()
+    logger.info(f"Creating tag: {new_tag_name}")
+    try:
+        tag_payload = {"tag": new_tag_name, "description": "Auto-generated by Bulldog"}
+        res = mautic_request("POST", "api/tags/new", payload=tag_payload)
+        
+        # Handle response (requests.Response or dict)
+        data = res.json() if hasattr(res, 'json') else res
+        new_tag_id = data.get("tag", {}).get("id")
+    except Exception as e:
+        logger.warning(f"Tag creation failed (tag might exist). Error: {e}")
+        new_tag_id = None
+
+    # Fallback: If creation failed, search for the tag by name
+    if not new_tag_id:
+        logger.info(f"Searching for existing tag: {new_tag_name}")
+        try:
+            res = mautic_request("GET", "api/tags", params={"search": new_tag_name})
+            data = res.json() if hasattr(res, 'json') else res
+            tags = data.get("tags", {})
+            
+            # Mautic returns tags as a dict keyed by ID { "123": {...} } or list
+            if isinstance(tags, dict):
+                for t_id, t_data in tags.items():
+                    if t_data.get("tag") == new_tag_name:
+                        new_tag_id = t_data.get("id")
+                        break
+        except Exception as e:
+            logger.error(f"Failed to search for existing tag: {e}")
+
+    if not new_tag_id:
+        logger.error("Aborting: Failed to retrieve tag ID (could not create or find).")
+        return
+
+    logger.info(f"Using Tag ID: {new_tag_id}")
+
+    # Build set of emails already processed with this tag ID to prevent duplicates
+    # within the same run or if the tag ID is reused.
+    processed_with_current_tag = set()
+    for item in history_list:
+        h_tag = item.get("tag_id")
+        h_email = item.get("email")
+        if h_tag and h_email and str(h_tag) == str(new_tag_id):
+            processed_with_current_tag.add(h_email.strip().lower())
+
+    # 4. Update segments filter tag to the new tag ID
+    logger.info(f"Updating segment {segment_id} filter to tag ID {new_tag_id}")
+    try:
+        seg_payload = {
+            "filters": [
+                {
+                    "glue": "and",
+                    "field": "tags",
+                    "object": "lead",
+                    "type": "tags",
+                    "operator": "in",
+                    "properties": {
+                        "filter": [new_tag_id]
+                    }
+                }
+            ]
+        }
+        mautic_request("PATCH", f"api/segments/{segment_id}/edit", seg_payload)
+        logger.info("Segment updated successfully.")
+    except Exception as e:
+        logger.error(f"Aborting: Error updating segment: {e}")
+        return
+
+    # 6. Process Contacts (Retries + CSV)
+    
+    # Load previous failures
+    previous_failures = []
+    if os.path.exists(cfg.failed_creation_file):
+        try:
+            with open(cfg.failed_creation_file, "r", encoding="utf-8") as f:
+                previous_failures = json.load(f)
+            logger.info(f"Loaded {len(previous_failures)} previous failures.")
+        except Exception:
+            pass
+
+    current_failures = {} # Key by email to avoid duplicates
+    success_count = 0
+
+    def process_contact(email, first, last, rotation_group, source_desc):
         email_key = email.lower()
-        full_name = "" if pd.isna(name_cell) else str(name_cell).strip()
-        first, last = split_name(full_name)
+        if email_key in processed_with_current_tag:
+            logger.info(f"Skipping {email} (already processed with tag {new_tag_id})")
+            return False
 
-        # --- SCENARIO A: Contact Exists Locally ---
-        if email_key in history_map:
-            existing_info = history_map[email_key]
-            cid = existing_info.get("id")
-            
-            if not cid:
-                continue
-
-            try:
-                # Fetch current tags from Mautic
-                remote_contact = contacts.get_contact_by_id(cid)
-                if not remote_contact:
-                    print(f"Row {idx}: Contact {cid} in history but not found in Mautic (404). Skipping.")
-                    continue
-
-                current_tags = get_tag_names(remote_contact)
-                has_test = "Test" in current_tags
-                has_warmup = "warmup_campaign" in current_tags
-
-                if has_test and not has_warmup:
-                    print(f"Row {idx}: Contact {cid} has 'Test' only. Swapping tags...")
-                    contacts.update_contact_tags(cid, ["-Test", "warmup_campaign"])
-                    
-                    # Add to pending updates list
-                    new_pending_items.append(existing_info)
-                    print(f"[UPDATE] OK id={cid} email={email} (Test -> warmup_campaign)")
-                
-                elif has_warmup:
-                    print(f"Row {idx}: Contact {cid} already has 'warmup_campaign'. Ignoring.")
-                
-                else:
-                    print(f"Row {idx}: Contact {cid} has tags {current_tags}. No action required.")
-
-            except Exception as e:
-                print(f"Row {idx}: Error checking contact {cid}: {e}")
-            
-            continue
-
-        # --- SCENARIO B: Contact Does Not Exist Locally ---
         payload = {
             "email": email,
             "firstname": first,
             "lastname": last,
-            "tags": cfg.default_create_tags,
-            "rotationgroup": idx % 4 + 1 # required for round robin distribution of emails
+            "tags": [new_tag_name, test_tag_name],
+            "rotationgroup": rotation_group
         }
 
         try:
             cid = contacts.create_contact(payload)
-            item = {"id": cid, "email": email, "firstname": first, "lastname": last, "rotationgroup": payload["rotationgroup"]}
+            item = {
+                "id": cid, 
+                "email": email, 
+                "firstname": first, 
+                "lastname": last, 
+                "rotationgroup": rotation_group,
+                "tag_id": new_tag_id,
+                "created_at": datetime.now().isoformat()
+            }
             
             new_history_items.append(item)
-            new_pending_items.append(item)
+            processed_with_current_tag.add(email_key)
+
+            # Remove from current_failures if it was there (e.g. from retry phase or previous duplicate row)
+            if email_key in current_failures:
+                del current_failures[email_key]
             
-            # Update in-memory map to handle duplicates within the same CSV
-            history_map[email_key] = item
-            
-            print(f"[CREATE] OK id={cid} email={email}")
+            logger.info(f"[CREATE] OK id={cid} email={email} ({source_desc})")
+            return True
         except Exception as e:
-            print(f"[CREATE] FAIL row={idx} email={email}: {e}")
+            logger.error(f"[CREATE] FAIL email={email} ({source_desc}): {e}")
+            current_failures[email_key] = {
+                "email": email,
+                "firstname": first,
+                "lastname": last,
+                "rotationgroup": rotation_group,
+                "failed_at": datetime.now().isoformat(),
+                "error": str(e)
+            }
+            return False
 
-    # Save Pending Updates
-    if new_pending_items:
-        pending_updates.extend(new_pending_items)
-        os.makedirs(os.path.dirname(cfg.pending_update_file), exist_ok=True)
-        with open(cfg.pending_update_file, "w", encoding="utf-8") as f:
-            json.dump(pending_updates, f, indent=2)
-        print(f"\nAdded {len(new_pending_items)} contacts to {cfg.pending_update_file}")
+    try:
+        # 6.1 Retry previously failed contacts
+        if previous_failures:
+            logger.info(f"Retrying {len(previous_failures)} previously failed contacts...")
+            for fail in previous_failures:
+                if not fail.get("email"): continue
+                if process_contact(fail["email"], fail.get("firstname", ""), fail.get("lastname", ""), fail.get("rotationgroup", 1), "retry"):
+                    success_count += 1
 
-    # Save History
-    history = []
-    if os.path.exists(cfg.history_file):
+        # 6.2 Iterate through the new CSV rows
+        logger.info(f"Starting processing of {len(df)} rows from CSV...")
+        for idx, row in df.iterrows():
+            email_raw = row.iloc[0] if len(row) > 0 else None
+            name_cell = row.iloc[1] if len(row) > 1 else None
+
+            if pd.isna(email_raw) or not str(email_raw).strip():
+                logger.warning(f"Skipping row {idx}: Missing or empty email.")
+                continue
+
+            email = str(email_raw).strip()
+            full_name = "" if pd.isna(name_cell) else str(name_cell).strip()
+            first, last = split_name(full_name)
+            
+            rotation_group = idx % 4 + 1
+            
+            if process_contact(email, first, last, rotation_group, "csv"):
+                success_count += 1
+
+    finally:
+        # 7. Save Failures (overwrite file with current state of failures)
         try:
-            with open(cfg.history_file, "r", encoding="utf-8") as f:
-                history = json.load(f)
-        except Exception:
-            pass
-    
-    if new_history_items:
-        history.extend(new_history_items)
-        os.makedirs(os.path.dirname(cfg.history_file), exist_ok=True)
-        with open(cfg.history_file, "w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2)
-        print(f"Added {len(new_history_items)} new contacts to {cfg.history_file}")
+            with open(cfg.failed_creation_file, "w", encoding="utf-8") as f:
+                json.dump(list(current_failures.values()), f, indent=2)
+            if current_failures:
+                logger.info(f"Saved {len(current_failures)} failed contacts to {cfg.failed_creation_file}")
+        except Exception as e:
+            logger.error(f"Error saving failed creations: {e}")
+
+        # Save History
+        if new_history_items:
+            full_history = []
+            if os.path.exists(cfg.history_file):
+                try:
+                    with open(cfg.history_file, "r", encoding="utf-8") as f:
+                        full_history = json.load(f)
+                except Exception:
+                    pass
+            
+            full_history.extend(new_history_items)
+            os.makedirs(os.path.dirname(cfg.history_file), exist_ok=True)
+            with open(cfg.history_file, "w", encoding="utf-8") as f:
+                json.dump(full_history, f, indent=2)
+            logger.info(f"Added {len(new_history_items)} new contacts to {cfg.history_file}")
+
+    logger.info(f"Processed {success_count} contacts successfully.")
 
 if __name__ == "__main__":
     main()

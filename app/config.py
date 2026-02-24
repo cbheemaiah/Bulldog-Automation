@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 @dataclass(frozen=True)
 class AppConfig:
@@ -9,17 +9,15 @@ class AppConfig:
     token_file: str
     timeout_seconds: int
 
-    csv_path: str
     limit: int
+    bulldog_api_url: str
+    segment_id: int
+    test_tag_name: str
 
     create_endpoint: str
-    update_endpoint_template: str
-    default_create_tags: List[str]
-    update_tags: List[str]
 
-    pending_update_file: str
     history_file: str
-    update_log_file: str
+    failed_creation_file: str
     input_dir: str
     output_dir: str
 
@@ -41,16 +39,14 @@ class AppConfig:
             token_file=os.path.join(output_dir, raw.get("token_file", "mautic_tokens.json")),
             timeout_seconds=int(raw.get("timeout_seconds", 30)),
 
-            csv_path=os.path.join(input_dir, raw["csv_path"]),
             limit=int(raw.get("limit", 0)),
 
+            bulldog_api_url=os.getenv("BULLDOG_API_URL", raw.get("bulldog_api_url", "")),
+            segment_id=int(raw.get("segment_id", 0)),
+            test_tag_name=str(raw.get("test_tag_name", "Test")),
             create_endpoint=raw.get("create_endpoint", "api/contacts/new"),
-            update_endpoint_template=raw.get("update_endpoint_template", "api/contacts/{id}/edit"),
-            default_create_tags=list(raw.get("default_create_tags", [])),
-            update_tags=list(raw.get("update_tags", [])),
-            pending_update_file=os.path.join(output_dir, raw.get("pending_update_file", "pending_updates.json")),
             history_file=os.path.join(output_dir, raw.get("history_file", "contact_history.json")),
-            update_log_file=os.path.join(output_dir, raw.get("update_log_file", "update_log.json")),
+            failed_creation_file=os.path.join(output_dir, raw.get("failed_creation_file", "failed_creations.json")),
             input_dir=input_dir,
             output_dir=output_dir,
         )
