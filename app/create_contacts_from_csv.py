@@ -267,7 +267,8 @@ def main():
         if previous_failures:
             logger.info(f"Retrying {len(previous_failures)} previously failed contacts...")
             for fail in previous_failures:
-                if not fail.get("email"): continue
+                if not fail.get("email"): 
+                    continue
                 if process_contact(fail["email"], fail.get("firstname", ""), fail.get("lastname", ""), fail.get("rotationgroup", 1), "retry"):
                     success_count += 1
 
