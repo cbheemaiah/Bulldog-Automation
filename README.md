@@ -43,9 +43,12 @@ uv run app/fetch_bulldog_csv.py
 
 ### Step 2: Create and Tag Contacts
 Processes the latest CSV found in the `data/` directory.
+
+> [!IMPORTANT]
+> **Safety First**: Always check the current day counter in `generated/bulldog_state.json` before running. If the count is wrong, use the `--day` override.
+
 - **Day-Based Tags**: Automatically increments a "Day" counter and creates a new tag in Mautic (e.g., `Digital-Bulldog-Day-1`).
-- **Segment Sync**: Updates the configured Mautic segment to filter only for contacts with the current day's tag.
-- **Contact Creation**: Creates new contacts with the day-tag, a test-tag, and a rotation group (1-4).
+- **Confirmation**: Running this script manually will show a summary of the tags being used and ask for a `(y/n)` confirmation before creating contacts.
 
 ```bash
 uv run app/create_contacts_from_csv.py
@@ -57,11 +60,26 @@ For manual/testing runs, you can use the following arguments:
 - `--day <number>`: Override the Bulldog Day. This value is saved and future automated runs will continue from here.
 
 ### Cleanup & Reset
-Bulldog includes a intelligent cleanup script to reset your environment.
+
+#### Full Reset (Testing Only)
+Deletes **all** contacts and **all** tags Bulldog has ever created, then wipes the local state.
 
 ```bash
 uv run scripts/delete_created_contacts.py
 ```
+
+#### Targeted Deletion
+Deletes only the contacts and the specific tag for a **single** Bulldog Day. This surgically edits your local history files to remove only the targeted records.
+
+```bash
+# Delete all contacts and the tag for Day 5
+uv run scripts/delete_by_tag.py --day 5
+
+# Or delete by a specific Mautic Tag ID
+uv run scripts/delete_by_tag.py --tag_id 29
+```
+
+**Note**: This script does **not** reset the Bulldog Day counter in `bulldog_state.json`. Subsequent automated runs will continue moving forward (e.g., if you delete Day 10, the next run will be Day 11).
 
 **What this does:**
 1.  **Deletes Contacts**: Removes all contacts listed in `contact_history.json` from Mautic.

@@ -32,7 +32,7 @@ fi
 # 4. Run Create Contacts Script
 # -----------------------------
 echo "[2/2] Running Create Contacts Script..." | tee -a "$LOG_FILE"
-"$UV_BIN" run app/create_contacts_from_csv.py 2>&1 | tee -a "$LOG_FILE"
+"$UV_BIN" run app/create_contacts_from_csv.py "$@" 2>&1 | tee -a "$LOG_FILE"
 CREATE_EXIT=${PIPESTATUS[0]}
 
 echo "Job finished with exit code $CREATE_EXIT at $(date)" | tee -a "$LOG_FILE"

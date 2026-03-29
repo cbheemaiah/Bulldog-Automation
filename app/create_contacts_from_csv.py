@@ -29,6 +29,7 @@ def main():
     parser = argparse.ArgumentParser(description="Bulldog: Import contacts from CSV to Mautic.")
     parser.add_argument("--file", type=str, help="Path to a specific CSV file to process (bypasses latest/today check).")
     parser.add_argument("--day", type=int, help="Override the current 'Bulldog Day' and save it to state.")
+    parser.add_argument("--yes", action="store_true", help="Skip confirmation prompt (useful for CRON).")
     args = parser.parse_args()
 
     # Configure logging
@@ -259,6 +260,26 @@ def main():
     except Exception as e:
         logger.error(f"Aborting: Error updating segment: {e}")
         return
+
+    # 5. User Confirmation
+    if not args.yes:
+        print("\n" + "="*50)
+        print("PROCEED WITH CONTACT CREATION?")
+        print(f"Bulldog Tag: {new_tag_name}")
+        print(f"Test Tag:    {test_tag_name}")
+        print(f"Segment ID:  {segment_id}")
+        print(f"CSV File:    {download_path}")
+        print(f"Row Limit:   {cfg.limit if cfg.limit > 0 else 'None'}")
+        print("="*50 + "\n")
+        
+        try:
+            confirm = input("Confirm processing? (y/n): ").strip().lower()
+            if confirm != 'y':
+                logger.info("Aborting by user request.")
+                return
+        except EOFError:
+            logger.error("No interactive terminal detected and --yes flag was not provided. Aborting.")
+            return
 
     # 6. Process Contacts (Retries + CSV)
     
