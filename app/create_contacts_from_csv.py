@@ -6,6 +6,7 @@ from datetime import datetime
 import glob
 import logging
 import chardet
+import argparse
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -24,6 +25,12 @@ def split_name(full_name: str):
     return parts[0], (" ".join(parts[1:]) if len(parts) > 1 else "")
 
 def main():
+    # 0. Parse CLI Arguments
+    parser = argparse.ArgumentParser(description="Bulldog: Import contacts from CSV to Mautic.")
+    parser.add_argument("--file", type=str, help="Path to a specific CSV file to process (bypasses latest/today check).")
+    parser.add_argument("--day", type=int, help="Override the current 'Bulldog Day' and save it to state.")
+    args = parser.parse_args()
+
     # Configure logging
     logging.basicConfig(
         level=logging.INFO,
@@ -51,24 +58,38 @@ def main():
         logger.error("Aborting: 'test_tag_name' not found in config.")
         return
 
-    # 1. Find the CSV to process (Latest import or fallback to config default)
-    search_pattern = os.path.join(cfg.input_dir, "bulldog_import_*.csv")
-    files = glob.glob(search_pattern)
-    
+    # 1. Find the CSV to process
     download_path = None
-    if files:
-        download_path = max(files, key=os.path.getctime)
-        logger.info(f"Found latest CSV file: {download_path}")
+    manual_file_override = False
+
+    if args.file:
+        if os.path.exists(args.file):
+            download_path = args.file
+            manual_file_override = True
+            logger.info(f"Using manual file override: {download_path}")
+        else:
+            logger.error(f"Aborting: Specified file does not exist: {args.file}")
+            return
+    else:
+        # Latest import logic (CRON mode)
+        search_pattern = os.path.join(cfg.input_dir, "bulldog_import_*.csv")
+        files = glob.glob(search_pattern)
+        if files:
+            download_path = max(files, key=os.path.getctime)
+            logger.info(f"Found latest CSV file: {download_path}")
 
     if not download_path or not os.path.exists(download_path) or os.path.getsize(download_path) == 0:
         logger.error("Aborting: No valid CSV file found to process.")
         return
 
-    # Ensure the CSV is from today to prevent reprocessing old data if fetch failed
-    today_compact = datetime.now().strftime("%Y%m%d")
-    if today_compact not in os.path.basename(download_path):
-        logger.error(f"Aborting: The latest CSV ({os.path.basename(download_path)}) is not from today ({today_compact}). Check if fetch_bulldog_csv.py ran successfully.")
-        return
+    # Ensure the CSV is from today to prevent reprocessing old data if fetch failed (Only if NOT manual)
+    if not manual_file_override:
+        today_compact = datetime.now().strftime("%Y%m%d")
+        if today_compact not in os.path.basename(download_path):
+            logger.error(f"Aborting: The latest CSV ({os.path.basename(download_path)}) is not from today ({today_compact}). Check if fetch_bulldog_csv.py ran successfully.")
+            return
+    else:
+        logger.info("Skipping today-date validation for manual file import.")
 
     logger.info(f"Processing CSV: {download_path}")
 
@@ -118,14 +139,13 @@ def main():
     def mautic_request(method, endpoint, payload=None, params=None):
         return mautic.request_json(method, endpoint, json_body=payload, params=params)
 
-    # 3. Create a new tag - Digital Bulldog - Day * and save ID
+    # 3. Handle Day State and persistence
     state_file = os.path.join(cfg.output_dir, "bulldog_state.json")
-
-    
     current_day = 0
     last_run_date = ""
     today_str = datetime.now().strftime("%Y-%m-%d")
 
+    # Load existing state
     if os.path.exists(state_file):
         try:
             with open(state_file, "r") as f:
@@ -135,13 +155,22 @@ def main():
         except Exception:
             pass
 
-    if last_run_date != today_str:
+    # Apply Overrides or Logic
+    if args.day is not None:
+        logger.info(f"Applying manual Day override: Setting day to {args.day}")
+        current_day = args.day
+        last_run_date = today_str # Mark today as run
+        # Save immediately
+        with open(state_file, "w") as f:
+            json.dump({"day": current_day, "last_run_date": last_run_date}, f)
+    elif last_run_date != today_str:
+        logger.info("New day detected. Incrementing Bulldog Day counter.")
         current_day += 1
         last_run_date = today_str
         with open(state_file, "w") as f:
             json.dump({"day": current_day, "last_run_date": last_run_date}, f)
 
-    logger.info(f"Current Day State: {current_day} (Last run: {last_run_date})")
+    logger.info(f"Current Day State: {current_day} (Target Date: {last_run_date})")
 
     new_tag_name = f"Digital-Bulldog-Day-{current_day}"
     new_tag_id = None
@@ -180,6 +209,24 @@ def main():
         return
 
     logger.info(f"Using Tag ID: {new_tag_id}")
+
+    # 3.1 Record tag for cleanup tracking
+    tags_file = os.path.join(cfg.output_dir, "created_tags.json")
+    os.makedirs(cfg.output_dir, exist_ok=True)
+    existing_tags = []
+    if os.path.exists(tags_file):
+        try:
+            with open(tags_file, "r") as f:
+                existing_tags = json.load(f)
+        except Exception:
+            pass
+    
+    # Check if this tag ID is already tracked
+    if not any(t.get("id") == new_tag_id for t in existing_tags):
+        existing_tags.append({"id": new_tag_id, "name": new_tag_name})
+        with open(tags_file, "w") as f:
+            json.dump(existing_tags, f, indent=2)
+        logger.info(f"Recorded tag '{new_tag_name}' (ID: {new_tag_id}) in cleanup tracker.")
 
     # Build set of emails already processed with this tag ID to prevent duplicates
     # within the same run or if the tag ID is reused.

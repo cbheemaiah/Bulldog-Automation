@@ -60,11 +60,45 @@ def main():
     else:
         print("No contacts in history to delete.")
 
+    # 2. Cleanup Created Tags
+    tags_file = os.path.join(cfg.output_dir, "created_tags.json")
+    if os.path.exists(tags_file):
+        try:
+            with open(tags_file, "r") as f:
+                tags_to_delete = json.load(f)
+            
+            if tags_to_delete:
+                print(f"Found {len(tags_to_delete)} tracked tags. Deleting after contacts...")
+                mautic = MauticClient(cfg.base_url, cfg.token_file, cfg.timeout_seconds)
+                
+                for tag in tags_to_delete:
+                    t_id = tag.get("id")
+                    t_name = tag.get("name")
+                    if not t_id: continue
+                    
+                    # Pattern requested: api/tags/{id}/delete
+                    tag_endpoint = f"api/tags/{t_id}/delete"
+                    try:
+                        mautic.request_json("DELETE", tag_endpoint)
+                        print(f"[TAG DELETE] OK id={t_id} name={t_name}")
+                    except Exception as e:
+                        if "404" in str(e):
+                            print(f"[TAG DELETE] Not Found (already deleted?) id={t_id} name={t_name}")
+                        else:
+                            print(f"[TAG DELETE] FAIL id={t_id} name={t_name}: {e}")
+            else:
+                print("No tracked tags to delete.")
+        except Exception as e:
+            print(f"Error processing tags cleanup: {e}")
+    else:
+        print("No tag tracking file found.")
+
     # Reset all state files
     state_files = [
         cfg.history_file,
         cfg.failed_creation_file,
-        os.path.join(cfg.output_dir, "bulldog_state.json")
+        os.path.join(cfg.output_dir, "bulldog_state.json"),
+        os.path.join(cfg.output_dir, "created_tags.json")
     ]
 
     for fpath in state_files:

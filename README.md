@@ -48,6 +48,16 @@ Processes the latest CSV found in the `data/` directory.
 uv run app/create_contacts_from_csv.py
 ```
 
+#### Manual Overrides
+For manual runs, you can use the following arguments:
+- `--file <path>`: Process a specific CSV file. This bypasses the "must be from today" check.
+- `--day <number>`: Override the current Bulldog Day. This value will be saved to the state and used for subsequent automated runs.
+
+Example:
+```bash
+uv run app/create_contacts_from_csv.py --file data/old_import.csv --day 10
+```
+
 ### Cleanup (Testing Only)
 Deletes all contacts tracked in `contact_history.json` from Mautic and resets the local state.
 
