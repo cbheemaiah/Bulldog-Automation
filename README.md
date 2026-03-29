@@ -1,6 +1,6 @@
 # Bulldog
 
-Bulldog is an automation tool for managing Mautic contacts. It handles importing contacts from CSV files, managing their lifecycle through automated day-based tagging (e.g., "Digital-Bulldog-Day-1"), and maintaining a local history of operations.
+Bulldog is an automation tool for managing Mautic contacts. It handles importing contacts from CSV files, managing their lifecycle through automated day-based tagging, and maintaining a local history of operations.
 
 ## Setup
 
@@ -25,8 +25,12 @@ MAUTIC_CLIENT_SECRET=your_client_secret
 
 ### 4. Configuration
 Ensure `config.json` is set up with your Mautic URL and file paths.
-- **Input**: Place CSV files in the `data/` directory (or use the fetch script).
-- **Output**: Generated files (tokens, state, history) appear in `generated/`.
+- **Input**: CSV files are downloaded to the `data/` directory.
+- **Output**: Persistent state and logs are stored in `generated/`:
+    - `bulldog_state.json`: Current Day counter and last run date.
+    - `contact_history.json`: List of successfully created contacts.
+    - `created_tags.json`: Registry of tags created by the script for automated cleanup.
+    - `mautic_tokens.json`: OAuth2 credentials.
 
 ## Usage
 
@@ -42,34 +46,33 @@ Processes the latest CSV found in the `data/` directory.
 - **Day-Based Tags**: Automatically increments a "Day" counter and creates a new tag in Mautic (e.g., `Digital-Bulldog-Day-1`).
 - **Segment Sync**: Updates the configured Mautic segment to filter only for contacts with the current day's tag.
 - **Contact Creation**: Creates new contacts with the day-tag, a test-tag, and a rotation group (1-4).
-- **Retries**: Automatically retries previously failed contact creations.
 
 ```bash
 uv run app/create_contacts_from_csv.py
 ```
 
 #### Manual Overrides
-For manual runs, you can use the following arguments:
-- `--file <path>`: Process a specific CSV file. This bypasses the "must be from today" check.
-- `--day <number>`: Override the current Bulldog Day. This value will be saved to the state and used for subsequent automated runs.
+For manual/testing runs, you can use the following arguments:
+- `--file <path>`: Process a specific CSV file (bypasses the "must be from today" check).
+- `--day <number>`: Override the Bulldog Day. This value is saved and future automated runs will continue from here.
 
-Example:
-```bash
-uv run app/create_contacts_from_csv.py --file data/old_import.csv --day 10
-```
-
-### Cleanup (Testing Only)
-Deletes all contacts tracked in `contact_history.json` from Mautic and resets the local state.
+### Cleanup & Reset
+Bulldog includes a intelligent cleanup script to reset your environment.
 
 ```bash
 uv run scripts/delete_created_contacts.py
 ```
+
+**What this does:**
+1.  **Deletes Contacts**: Removes all contacts listed in `contact_history.json` from Mautic.
+2.  **Deletes Tags**: Removes all tracked tags in `created_tags.json` using the `api/tags/{id}/delete` endpoint.
+3.  **Resets State**: Deletes all local history, state files, and cached CSVs.
 
 ## Automation
 A convenience script `run_daily_import.sh` is provided to run the full workflow (Fetch + Create) sequentially, suitable for CRON jobs.
 
 ---
 # Notes
-- Make sure to manually delete tags if you reset the sequence.
 - Remember to adjust the `limit` parameter in `config.json` after testing (set it to 0 for full runs).
+- Ensure your Mautic API has the appropriate permissions for contact and tag deletion.
 - Setup a CRON job locally to automate the process daily.
