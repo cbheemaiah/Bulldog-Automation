@@ -1,6 +1,6 @@
 # Bulldog
 
-Bulldog is an automation tool for managing Mautic contacts. It handles importing contacts from CSV files, managing their lifecycle through specific tags (e.g., "warmup_campaign" to "Test"), and maintaining a local history of operations.
+Bulldog is an automation tool for managing Mautic contacts. It handles importing contacts from CSV files, managing their lifecycle through automated day-based tagging (e.g., "Digital-Bulldog-Day-1"), and maintaining a local history of operations.
 
 ## Setup
 
@@ -25,29 +25,27 @@ MAUTIC_CLIENT_SECRET=your_client_secret
 
 ### 4. Configuration
 Ensure `config.json` is set up with your Mautic URL and file paths.
-- **Input**: Place CSV files in the `data/` directory.
-- **Output**: Generated files (tokens, logs, history) appear in `generated/`.
+- **Input**: Place CSV files in the `data/` directory (or use the fetch script).
+- **Output**: Generated files (tokens, state, history) appear in `generated/`.
 
 ## Usage
 
-### Step 1: Create or Reset Contacts
-Reads the CSV file defined in `config.json`.
-- **New Contacts**: Created in Mautic with the default tag (`warmup_campaign`).
-- **Existing Contacts**: If a contact exists in local history and has the `Test` tag, it is reset to `warmup_campaign`.
-- **Queue**: All processed contacts are added to `generated/pending_updates.json`.
+### Step 1: Fetch External CSV
+Downloads the latest contact list from the source defined in `config.json` (`bulldog_api_url`).
+
+```bash
+uv run app/fetch_bulldog_csv.py
+```
+
+### Step 2: Create and Tag Contacts
+Processes the latest CSV found in the `data/` directory.
+- **Day-Based Tags**: Automatically increments a "Day" counter and creates a new tag in Mautic (e.g., `Digital-Bulldog-Day-1`).
+- **Segment Sync**: Updates the configured Mautic segment to filter only for contacts with the current day's tag.
+- **Contact Creation**: Creates new contacts with the day-tag, a test-tag, and a rotation group (1-4).
+- **Retries**: Automatically retries previously failed contact creations.
 
 ```bash
 uv run app/create_contacts_from_csv.py
-```
-
-### Step 2: Update Tags
-Processes the queue from `pending_updates.json`.
-- Updates tags in Mautic (removes `warmup_campaign`, adds `Test`).
-- Logs successful updates to `generated/update_log.json`.
-- Failed updates remain in the pending file for retry.
-
-```bash
-uv run app/update_contacts_tags.py
 ```
 
 ### Cleanup (Testing Only)
@@ -57,5 +55,11 @@ Deletes all contacts tracked in `contact_history.json` from Mautic and resets th
 uv run scripts/delete_created_contacts.py
 ```
 
+## Automation
+A convenience script `run_daily_import.sh` is provided to run the full workflow (Fetch + Create) sequentially, suitable for CRON jobs.
 
-# Remember to remove limmit parameter
+---
+# Notes
+- Make sure to manually delete tags if you reset the sequence.
+- Remember to adjust the `limit` parameter in `config.json` after testing (set it to 0 for full runs).
+- Setup a CRON job locally to automate the process daily.

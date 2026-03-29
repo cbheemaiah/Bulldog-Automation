@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime
 import glob
 import logging
+import chardet
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -63,11 +64,23 @@ def main():
         logger.error("Aborting: No valid CSV file found to process.")
         return
 
+    # Ensure the CSV is from today to prevent reprocessing old data if fetch failed
+    today_compact = datetime.now().strftime("%Y%m%d")
+    if today_compact not in os.path.basename(download_path):
+        logger.error(f"Aborting: The latest CSV ({os.path.basename(download_path)}) is not from today ({today_compact}). Check if fetch_bulldog_csv.py ran successfully.")
+        return
+
     logger.info(f"Processing CSV: {download_path}")
 
     # Validate CSV format before contacting Mautic
     try:
-        df = pd.read_csv(download_path)
+        with open(download_path, "rb") as f:
+            raw_data = f.read()
+        result = chardet.detect(raw_data)
+        encoding = result["encoding"]
+        logger.info(f"Detected encoding: {encoding} (confidence: {result['confidence']})")
+
+        df = pd.read_csv(download_path, encoding=encoding)
         logger.info(f"CSV loaded. Rows: {len(df)}")
     except Exception as e:
         logger.error(f"Aborting: Invalid CSV format in {download_path}. Error: {e}")
