@@ -69,7 +69,9 @@ uv run scripts/delete_created_contacts.py
 3.  **Resets State**: Deletes all local history, state files, and cached CSVs.
 
 ## Automation
-A convenience script `run_daily_import.sh` is provided to run the full workflow (Fetch + Create) sequentially, suitable for CRON jobs.
+A convenience script `run_daily_import.sh` is provided to run the full workflow (Fetch + Create) sequentially.
+
+**Logging**: This script uses `tee` to output all logs to both your **terminal** (for real-time monitoring) and timestamped **log files** in the `logs/` directory (for historical records).
 
 ---
 # Notes
