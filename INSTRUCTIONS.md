@@ -50,7 +50,7 @@ Review and update `config.json` in the root directory:
 
 ## 5. Running the Pipeline
 
-### Automatic Workflow (CRON style)
+### Automatic Workflow 
 The most common way to run Bulldog is via the daily import script:
 ```bash
 ./run_daily_import.sh
@@ -79,4 +79,4 @@ uv run scripts/delete_created_contacts.py
 ```
 
 ---
-**Note:** Logs for daily runs can be found in the `logs/` directory. Success and history files are maintained in the `generated/` directory.
+Success and history files are maintained in the `generated/` directory.

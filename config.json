@@ -8,7 +8,7 @@
     "history_file": "contact_history.json",
     "failed_creation_file": "failed_creations.json",
     "limit": 5,
-    "segment_id": 1020,
+    "segment_id": 1023,
     "test_tag_name": "Test",
     "exclude_tag_id": 56,
     "exclude_tag_name": "Done",
