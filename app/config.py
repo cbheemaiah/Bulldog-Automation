@@ -13,6 +13,10 @@ class AppConfig:
     bulldog_api_url: str
     segment_id: int
     test_tag_name: str
+    exclude_tag_id: int
+    exclude_tag_name: str
+    default_include_tag_id: int
+    default_include_tag_name: str
 
     create_endpoint: str
 
@@ -44,6 +48,10 @@ class AppConfig:
             bulldog_api_url=os.getenv("BULLDOG_API_URL", raw.get("bulldog_api_url", "")),
             segment_id=int(raw.get("segment_id", 0)),
             test_tag_name=str(raw.get("test_tag_name", "Test")),
+            exclude_tag_id=int(raw.get("exclude_tag_id", 0)),
+            exclude_tag_name=str(raw.get("exclude_tag_name", "Done")),
+            default_include_tag_id=int(raw.get("default_include_tag_id", 0)),
+            default_include_tag_name=str(raw.get("default_include_tag_name", "Default-Bulldog")),
             create_endpoint=raw.get("create_endpoint", "api/contacts/new"),
             history_file=os.path.join(output_dir, raw.get("history_file", "contact_history.json")),
             failed_creation_file=os.path.join(output_dir, raw.get("failed_creation_file", "failed_creations.json")),

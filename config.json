@@ -1,13 +1,17 @@
 {
     "base_url": "https://mautic7.stage.mautic.filetax.com/",
     "token_file": "mautic_tokens.json",
-    "timeout_seconds": 30,  
+    "timeout_seconds": 30,
     "input_dir": "./data",
     "output_dir": "./generated",
     "create_endpoint": "api/contacts/new",
     "history_file": "contact_history.json",
     "failed_creation_file": "failed_creations.json",
     "limit": 5,
-    "segment_id": 1014,
-    "test_tag_name": "Test"
+    "segment_id": 1020,
+    "test_tag_name": "Test",
+    "exclude_tag_id": 56,
+    "exclude_tag_name": "Done",
+    "default_include_tag_id": 57,
+    "default_include_tag_name": "Default-Bulldog"
 }

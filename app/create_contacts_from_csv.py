@@ -252,6 +252,26 @@ def main():
                     "properties": {
                         "filter": [new_tag_id]
                     }
+                },
+                {
+                    "glue": "and",
+                    "field": "tags",
+                    "object": "lead",
+                    "type": "tags",
+                    "operator": "!in",
+                    "properties": {
+                        "filter": [cfg.exclude_tag_id]
+                    }
+                },
+                {
+                    "glue": "and",
+                    "field": "tags",
+                    "object": "lead",
+                    "type": "tags",
+                    "operator": "in",
+                    "properties": {
+                        "filter": [cfg.default_include_tag_id]
+                    }
                 }
             ]
         }
@@ -306,7 +326,7 @@ def main():
             "email": email,
             "firstname": first,
             "lastname": last,
-            "tags": [new_tag_name, test_tag_name],
+            "tags": [new_tag_name, test_tag_name, cfg.default_include_tag_name, f"-{cfg.exclude_tag_name}"],
             "rotationgroup": rotation_group
         }
 
