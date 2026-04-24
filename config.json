@@ -7,7 +7,7 @@
     "create_endpoint": "api/contacts/new",
     "history_file": "contact_history.json",
     "failed_creation_file": "failed_creations.json",
-    "limit": 5,
+    "limit": 15,
     "segment_id": 1023,
     "test_tag_name": "Test",
     "exclude_tag_id": 56,

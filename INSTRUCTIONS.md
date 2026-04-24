@@ -56,7 +56,7 @@ The most common way to run Bulldog is via the daily import script:
 ./run_daily_import.sh
 ```
 
-### Individual Steps
+### Individual Steps - What the above command does
 1.  **Fetch the CSV**:
     ```bash
     uv run app/fetch_bulldog_csv.py
@@ -72,11 +72,11 @@ If you need to process a specific file or force a specific Day:
 uv run app/create_contacts_from_csv.py --file data/my_custom_import.csv --day 5
 ```
 
-## 6. Cleanup and Reset
+## 6. Cleanup and Reset - if needed after testing
 If you are testing and want to wipe all contacts and tags created by Bulldog:
 ```bash
 uv run scripts/delete_created_contacts.py
 ```
 
 ---
-Success and history files are maintained in the `generated/` directory.
+Success and history files are maintained in the `generated/` directory and `logs/`.

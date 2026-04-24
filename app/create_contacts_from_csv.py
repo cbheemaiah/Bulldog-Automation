@@ -17,6 +17,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Rotation pattern for contact distribution
+ROTATION_PATTERN = [1, 2, 2, 3, 4, 4, 1, 4, 1, 4]
+
 def split_name(full_name: str):
     s = (full_name or "").strip()
     if not s:
@@ -349,10 +352,10 @@ def main():
             if email_key in current_failures:
                 del current_failures[email_key]
             
-            logger.info(f"[CREATE] OK id={cid} email={email} ({source_desc})")
+            logger.info(f"[CREATE] OK id={cid} email={email} (group={rotation_group}) ({source_desc})")
             return True
         except Exception as e:
-            logger.error(f"[CREATE] FAIL email={email} ({source_desc}): {e}")
+            logger.error(f"[CREATE] FAIL email={email} (group={rotation_group}) ({source_desc}): {e}")
             current_failures[email_key] = {
                 "email": email,
                 "firstname": first,
@@ -387,7 +390,7 @@ def main():
             full_name = "" if pd.isna(name_cell) else str(name_cell).strip()
             first, last = split_name(full_name)
             
-            rotation_group = idx % 4 + 1
+            rotation_group = ROTATION_PATTERN[idx % len(ROTATION_PATTERN)]
             
             if process_contact(email, first, last, rotation_group, "csv"):
                 success_count += 1
